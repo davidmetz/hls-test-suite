@@ -10,12 +10,20 @@
 #define LATENCY 100
 
 #define MIN(a, b) ((a)>(b)?(b):(a))
-extern void hls_decouple_request_32(uint32_t channel, uint32_t * addr);
+
+extern void hls_decouple_request_32(uint32_t channel, uint32_t *addr);
+
 extern uint32_t hls_decouple_response_32(uint32_t channel, uint32_t buffer_slots);
-enum decoupled_channels{
+
+extern void hls_stream_enq_uint32t(uint32_t channel, uint32_t data);
+
+extern uint32_t hls_stream_deq_uint32t(uint32_t channel, uint32_t buffer_slots);
+
+enum decoupled_channels {
     result_channel,
     i_channel,
     j_channel,
+    rv_stream,
 };
 
 void kernel(
@@ -23,54 +31,77 @@ void kernel(
         uint32_t *result,
         uint32_t n
 ) {
-    uint32_t width2;
-    for (uint32_t width = 1; width < n; width = width2) {
-        width2 = width << 1;
-        for (uint32_t i_outer = 0; i_outer < n; i_outer+=width2) {
+    if (!n)
+        return;
+    uint32_t width = 1;
+    do {
+        uint32_t width2 = width << 1;
+        uint32_t i_outer = 0;
+        do {
             uint32_t i_left = i_outer;
             uint32_t i_right = MIN(i_outer + width, n);
             uint32_t i_end = MIN(i_outer + width2, n);
-            for (uint32_t i = i_left; i < i_right; ++i) {
-                hls_decouple_request_32(i_channel, &table[i]);
+
+            uint32_t i_req = i_left;
+            do {
+                hls_decouple_request_32(i_channel, &table[i_req]);
+                i_req++;
+            } while (i_req < i_right);
+            if (i_right < i_end) {
+                uint32_t j_req = i_right;
+                do {
+                    hls_decouple_request_32(j_channel, &table[j_req]);
+                    j_req++;
+                } while (j_req < i_end);
             }
-            for (uint32_t j = i_right; j < i_end; ++j) {
-                hls_decouple_request_32(j_channel, &table[j]);
-            }
+
             uint32_t i = i_left;
             uint32_t j = i_right;
             uint32_t table_i;
             uint32_t table_j;
             bool update_table_i = true;
             bool update_table_j = true;
-            for (uint32_t k = i_left; k < i_end; ++k) {
-                if(update_table_i && i<i_right){
+            uint32_t k = i_left;
+            do {
+                if (update_table_i && i < i_right) {
                     table_i = hls_decouple_response_32(i_channel, LATENCY);
                 }
                 update_table_i = false;
-                if(update_table_j && j<i_end){
+                if (update_table_j && j < i_end) {
                     table_j = hls_decouple_response_32(j_channel, LATENCY);
                 }
                 update_table_j = false;
+                uint32_t rv;
                 if (i < i_right && (j >= i_end || table_i <= table_j)) {
-                    result[k] = table_i;
+                    rv = table_i;
                     update_table_i = true;
                     i = i + 1;
                 } else {
-                    result[k] = table_j;
+                    rv = table_j;
                     update_table_j = true;
                     j = j + 1;
                 }
-            }
-        }
-        if(width2<n){
-            for (uint32_t i = 0; i < n; ++i) {
+                hls_stream_enq_uint32t(rv_stream, rv);
+                k++;
+            } while (k < i_end);
+            i_outer += width2;
+        } while (i_outer < n);
+        uint32_t k = 0;
+        do {
+            result[k] = hls_stream_deq_uint32t(rv_stream, LATENCY);
+            k++;
+        } while (k < n);
+        if (width2 < n) {
+            uint32_t i = 0;
+            do {
+                // use a single loop, but a decouple request to avoid addrq stuff
                 hls_decouple_request_32(result_channel, &result[i]);
-            }
-            for (uint32_t i = 0; i < n; ++i) {
                 table[i] = hls_decouple_response_32(result_channel, LATENCY);
-            }
+                i++;
+            } while (i < n);
         }
-    }
+        width = width2;
+    } while (width < n);
 }
 
 int comp(const void *elem1, const void *elem2) {

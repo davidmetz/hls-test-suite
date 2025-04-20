@@ -30,10 +30,10 @@ void kernel(
             uint32_t i_left = i_outer;
             uint32_t i_right = MIN(i_outer + width, n);
             uint32_t i_end = MIN(i_outer + width2, n);
-            for (size_t i = i_left; i < i_right; ++i) {
+            for (uint32_t i = i_left; i < i_right; ++i) {
                 hls_decouple_request_32(i_channel, &table[i]);
             }
-            for (size_t j = i_right; j < i_end; ++j) {
+            for (uint32_t j = i_right; j < i_end; ++j) {
                 hls_decouple_request_32(j_channel, &table[j]);
             }
             uint32_t i = i_left;

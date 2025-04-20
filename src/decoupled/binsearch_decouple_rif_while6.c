@@ -43,17 +43,13 @@ void kernel(
         uint32_t table_elements,
         uint32_t sorted_elements
 ) {
-
-    for (uint32_t i = 0; i < table_elements; i++) {
-        hls_decouple_request_32(table_channel, &table[i]);
-    }
     uint32_t rif = 0; // requests in flight
     uint32_t table_i = 0;
     for (uint32_t i = 0; i < table_elements;) {
         uint32_t l, r, m, index;
         TYPE element;
         if (rif < RIF && table_i < table_elements) {
-            element = hls_decouple_response_32(table_channel, OUTSTANDING_READS);
+            element = table[table_i];
             index = table_i++;
             l = 0;
             r = sorted_elements - 1;

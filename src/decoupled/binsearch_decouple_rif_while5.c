@@ -36,6 +36,7 @@ enum decoupled_channels {
 };
 
 #define EXTRA_ITERATIONS 1
+#define RIF (OUTSTANDING_READS-1)
 
 void kernel(
         const TYPE *table,
@@ -53,7 +54,7 @@ void kernel(
     for (uint32_t i = 0; i < table_elements;) {
         uint32_t l, r, m, index;
         TYPE element;
-        if (rif < OUTSTANDING_READS && table_i < table_elements) {
+        if (rif < RIF && table_i < table_elements) {
             element = hls_decouple_response_32(table_channel, OUTSTANDING_READS);
             index = table_i++;
             l = 0;

@@ -8,15 +8,14 @@
 
 #define TYPE uint32_t
 
+//#define LATENCY 128
 #define LATENCY 128
-#define OUTSTANDING_READS LATENCY
+#define CHUNK_SIZE LATENCY-1
 
 extern void hls_decouple_request_32(uint32_t channel, uint32_t *addr);
-
 extern uint32_t hls_decouple_response_32(uint32_t channel, uint32_t buffer_slots);
 
 extern void hls_stream_enq_uint32t(uint32_t channel, uint32_t data);
-
 extern uint32_t hls_stream_deq_uint32t(uint32_t channel, uint32_t buffer_slots);
 
 enum decoupled_channels {
@@ -30,12 +29,10 @@ enum decoupled_channels {
     l_stream2,
     r_sorted_channel,
     l_sorted_channel,
-    index_stream,
 };
 
 #define EXTRA_ITERATIONS 1
-#define RIF (OUTSTANDING_READS-1)
-
+#define MIN(a, b) (((a)<(b))?(a):(b))
 void kernel(
         const TYPE *table,
         const TYPE *sorted,
@@ -47,47 +44,47 @@ void kernel(
     for (uint32_t i = 0; i < table_elements; i++) {
         hls_decouple_request_32(table_channel, &table[i]);
     }
-    uint32_t rif = 0; // requests in flight
-    uint32_t table_i = 0;
     for (uint32_t i = 0; i < table_elements;) {
-        uint32_t l, r, m, index;
-        TYPE element;
-        if (rif < RIF && table_i < table_elements) {
-            element = hls_decouple_response_32(table_channel, OUTSTANDING_READS);
-            index = table_i++;
-            l = 0;
-            r = sorted_elements - 1;
-            rif++;
-        } else {
-            element = hls_stream_deq_uint32t(element_stream, OUTSTANDING_READS);
-            l = hls_stream_deq_uint32t(l_stream, OUTSTANDING_READS);
-            r = hls_stream_deq_uint32t(r_stream, OUTSTANDING_READS);
-            index = hls_stream_deq_uint32t(index_stream, OUTSTANDING_READS);
-            TYPE tmp = hls_decouple_response_32(sorted_channel, OUTSTANDING_READS);
-            m = (r + l) >> 1;
-            if (tmp > element) {
-                r = m-1;
-            } else {
-                l = m+1;
-            }
-            bool equal = tmp == element;
-            uint32_t res = -1;
-            if(equal){
-                res = m;
-            }
-            if(equal || !(l<=r)){
-                result[index] = res;
-                i++;
-                rif--;
-                continue;
+        uint32_t i_p_chuck = i + CHUNK_SIZE;
+        uint32_t chunk_end = MIN(i_p_chuck, table_elements);
+        uint32_t sorted_extra = sorted_elements << EXTRA_ITERATIONS;
+        for (uint32_t j = 1; sorted_extra >= j; j = j << 1) {
+            bool first_iteration = j == 1;
+            bool last_iteration = j << 1 > sorted_extra;
+            for (uint32_t k = i; k < chunk_end; ++k) {
+                uint32_t l, r, m;
+                TYPE element;
+                uint32_t res = -1;
+                if (first_iteration) {
+                    element = hls_decouple_response_32(table_channel, LATENCY);
+                    l = 0;
+                    r = sorted_elements - 1;
+                } else {
+                    element = hls_stream_deq_uint32t(element_stream, LATENCY);
+                    l = hls_stream_deq_uint32t(l_stream, LATENCY);
+                    r = hls_stream_deq_uint32t(r_stream, LATENCY);
+                    TYPE tmp = hls_decouple_response_32(sorted_channel, LATENCY);
+                    m = (r + l) >> 1;
+                    if(tmp == element){
+                        res = m;
+                    } else if (tmp > element) {
+                        r = m-1;
+                    } else {
+                        l = m+1;
+                    }
+                }
+                m = (r + l) >> 1;
+                if (last_iteration) {
+                    result[k] = res;
+                } else {
+                    hls_stream_enq_uint32t(element_stream, element);
+                    hls_stream_enq_uint32t(l_stream, l);
+                    hls_stream_enq_uint32t(r_stream, r);
+                    hls_decouple_request_32(sorted_channel, &sorted[m]);
+                }
             }
         }
-        m = (r + l) >> 1;
-        hls_stream_enq_uint32t(element_stream, element);
-        hls_stream_enq_uint32t(l_stream, l);
-        hls_stream_enq_uint32t(r_stream, r);
-        hls_stream_enq_uint32t(index_stream, index);
-        hls_decouple_request_32(sorted_channel, &sorted[m]);
+        i = i_p_chuck;
     }
 }
 

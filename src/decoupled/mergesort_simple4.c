@@ -7,40 +7,44 @@
 
 #define MIN(a, b) ((a)>(b)?(b):(a))
 
-void merge(const uint32_t *table, uint32_t *result, uint32_t i_left, uint32_t i_right, uint32_t i_end) {
-    uint32_t i = i_left;
-    uint32_t j = i_right;
-    for (uint32_t k = i_left; k < i_end; ++k) {
-        if (i < i_right && (j >= i_end || table[i] <= table[j])) {
-            result[k] = table[i];
-            i = i + 1;
-        } else {
-            result[k] = table[j];
-            j = j + 1;
+void sort_iteration(const uint32_t *table, uint32_t *result, uint32_t n, uint32_t width2, uint32_t width) {
+    for (uint32_t i_outer = 0; i_outer < n; i_outer+=width2) {
+        uint32_t i_left = i_outer;
+        uint32_t i_right = MIN(i_outer + width, n);
+        uint32_t i_end = MIN(i_outer + width2, n);
+        uint32_t i = i_left;
+        uint32_t j = i_right;
+        for (uint32_t k = i_left; k < i_end; ++k) {
+            if (i < i_right && (j >= i_end || table[i] <= table[j])) {
+                result[k] = table[i];
+                i = i + 1;
+            } else {
+                result[k] = table[j];
+                j = j + 1;
+            }
         }
     }
 }
 
-void kernel(
+uint32_t * kernel(
         uint32_t *table,
         uint32_t *result,
         uint32_t n
 ) {
     uint32_t width2;
+    uint32_t * rv;
     for (uint32_t width = 1; width < n; width = width2) {
         width2 = width << 1;
-        for (uint32_t i_outer = 0; i_outer < n; i_outer += width2) {
-            uint32_t i_left = i_outer;
-            uint32_t i_right = MIN(i_outer + width, n);
-            uint32_t i_end = MIN(i_outer + width2, n);
-            merge(table, result, i_left, i_right, i_end);
-        }
-        if (width2 < n) {
-            for (uint32_t i = 0; i < n; ++i) {
-                table[i] = result[i];
-            }
+        sort_iteration(table, result, n, width2, width);
+        rv = result;
+        if(width2<n){
+            width = width2;
+            width2 = width << 1;
+            sort_iteration(result, table, n, width2, width);
+            rv = table;
         }
     }
+    return rv;
 }
 
 int comp(const void *elem1, const void *elem2) {
@@ -71,10 +75,10 @@ int main() {
         expected_result[i] = tmp;
     }
     sort_ref(expected_result, sort_elements);
-    kernel(table, result, sort_elements);
+    uint32_t* kernel_result = kernel(table, result, sort_elements);
     uint32_t prev_element = 0;
     for (size_t i = 0; i < sort_elements; ++i) {
-        assert(result[i] == expected_result[i]);
+        assert(kernel_result[i] == expected_result[i]);
         assert(expected_result[i] >= prev_element);
         prev_element = expected_result[i];
     }

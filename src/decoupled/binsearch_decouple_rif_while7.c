@@ -52,6 +52,7 @@ void kernel(
     for (uint32_t i = 0; i < table_elements;) {
         uint32_t l, r, m, index;
         TYPE element;
+        bool load = true;
         if (rif < RIF && table_i < table_elements) {
             element = hls_decouple_response_32(table_channel, OUTSTANDING_READS);
             index = table_i++;
@@ -79,15 +80,17 @@ void kernel(
                 result[index] = res;
                 i++;
                 rif--;
-                continue;
+                load = false;
             }
         }
-        m = (r + l) >> 1;
-        hls_stream_enq_uint32t(element_stream, element);
-        hls_stream_enq_uint32t(l_stream, l);
-        hls_stream_enq_uint32t(r_stream, r);
-        hls_stream_enq_uint32t(index_stream, index);
-        hls_decouple_request_32(sorted_channel, &sorted[m]);
+        if(load) {
+            m = (r + l) >> 1;
+            hls_stream_enq_uint32t(element_stream, element);
+            hls_stream_enq_uint32t(l_stream, l);
+            hls_stream_enq_uint32t(r_stream, r);
+            hls_stream_enq_uint32t(index_stream, index);
+            hls_decouple_request_32(sorted_channel, &sorted[m]);
+        }
     }
 }
 

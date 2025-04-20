@@ -5,9 +5,21 @@
 #include <string.h>
 
 #define TYPE float
-//#define TYPE int
-#define ITERATIONS 10
-#define FACTOR 0.0001f
+#define LATENCY 100
+
+extern void hls_decouple_request_32(uint32_t channel, const uint32_t * addr);
+extern uint32_t hls_decouple_response_32(uint32_t channel, uint32_t buffer_slots);
+
+extern void hls_decouple_request_TYPE(uint32_t channel, const TYPE * addr);
+extern TYPE hls_decouple_response_TYPE(uint32_t channel, uint32_t buffer_slots);
+
+enum decoupled_channels{
+    vals_dec_channel,
+    cols_dec_channel,
+    rows_dec_channel,
+    vec_dec_channel,
+    out_dec_channel
+};
 
 void kernel(
         const TYPE *restrict vals,
@@ -15,66 +27,66 @@ void kernel(
         const uint32_t *restrict rowDelimiters,
         uint32_t startElement,
         uint32_t endElement,
-        uint32_t firstDelim,
-        TYPE *restrict vec,
+        uint32_t nextDelim,
+        const TYPE *restrict vec,
         TYPE *restrict out,
-        uint32_t nrows,
-        TYPE factor,
-        uint32_t iterations
+        uint32_t nrows
 ){
-    for (uint32_t k = 0; k < iterations; ++k) {
-        uint32_t nextDelim = firstDelim;
-        uint32_t rowStart = startElement;
-        for(uint32_t i = 0; i < nrows; i++){
-            TYPE sum = 0;
-            for (uint32_t j = rowStart; j < nextDelim; j++){
-                TYPE Si = vals[j] * vec[cols[j]];
-                sum = sum + Si;
-            }
+    for (uint32_t j = startElement; j < endElement; j++) {
+        hls_decouple_request_32(cols_dec_channel, &cols[j]);
+        uint32_t i = hls_decouple_response_32(cols_dec_channel, LATENCY);
+        hls_decouple_request_TYPE(vec_dec_channel, &vec[i]);
+        hls_decouple_request_TYPE(vals_dec_channel, &vals[j]);
+    }
+    for (uint32_t j = 2; j <= nrows+1; j++) {
+        hls_decouple_request_32(rows_dec_channel, &rowDelimiters[j]);
+    }
+    TYPE sum = 0;
+    uint32_t j = startElement;
+    for (uint32_t i = 0; i < nrows; ){
+        if(j == nextDelim) {
             out[i] = sum;
-            rowStart = nextDelim;
-            nextDelim = rowDelimiters[i+2];
-        }
-        for (size_t l = 0; l < nrows; ++l) {
-            vec[l] = out[l]*factor;
+            sum = 0;
+            i++;
+            nextDelim = hls_decouple_response_32(rows_dec_channel, LATENCY);
+        } else {
+            TYPE cval = hls_decouple_response_TYPE(vals_dec_channel, LATENCY);
+            TYPE vval = hls_decouple_response_TYPE(vec_dec_channel, LATENCY);
+            TYPE Si = cval * vval;
+            sum += Si;
+            j++;
         }
     }
 }
 
-void multi_spmv(
+void spmv(
         const TYPE *restrict vals,
         const uint32_t *restrict cols,
         const uint32_t *restrict rowDelimiters,
         uint32_t nrows,
-        TYPE *restrict vec,
+        const TYPE *restrict vec,
         TYPE *restrict out
 ) {
-    kernel(vals, cols, rowDelimiters, rowDelimiters[0], rowDelimiters[nrows], rowDelimiters[1], vec, out, nrows, FACTOR, ITERATIONS);
+    kernel(vals, cols, rowDelimiters, rowDelimiters[0], rowDelimiters[nrows], rowDelimiters[1], vec, out, nrows);
 }
 
-void multi_spmv_ref(
+void spmv_ref(
         const TYPE *restrict vals,
         const uint32_t *restrict cols,
         const uint32_t *restrict rowDelimiters,
         uint32_t nrows,
-        TYPE *restrict vec,
+        const TYPE *restrict vec,
         TYPE *restrict out
 ) {
-
-    for (uint32_t k = 0; k < ITERATIONS; ++k) {
-        for (uint32_t i = 0; i < nrows; i++) {
-            TYPE sum = 0;
-            uint32_t tmp_begin = rowDelimiters[i];
-            uint32_t tmp_end = rowDelimiters[i + 1];
-            for (uint32_t j = tmp_begin; j < tmp_end; j++) {
-                TYPE Si = vals[j] * vec[cols[j]];
-                sum = sum + Si;
-            }
-            out[i] = sum;
+    for (uint32_t i = 0; i < nrows; i++) {
+        TYPE sum = 0;
+        uint32_t tmp_begin = rowDelimiters[i];
+        uint32_t tmp_end = rowDelimiters[i + 1];
+        for (uint32_t j = tmp_begin; j < tmp_end; j++) {
+            TYPE Si = vals[j] * vec[cols[j]];
+            sum = sum + Si;
         }
-        for (size_t l = 0; l < nrows; ++l) {
-            vec[l] = out[l]*FACTOR;
-        }
+        out[i] = sum;
     }
 }
 
@@ -108,10 +120,8 @@ int main() {
     uint32_t nrows = 128;
     double density = 0.1;//1.0/nrows;
     TYPE *vec = malloc(sizeof(TYPE) * nrows);
-    TYPE *vec_ref = malloc(sizeof(TYPE) * nrows);
     for (uint32_t i = 0; i < nrows; ++i) {
         vec[i] = i;
-        vec_ref[i] = i;
     }
 
     TYPE *vals;
@@ -122,8 +132,8 @@ int main() {
 
     TYPE *out = malloc(sizeof(TYPE) * nrows);
     TYPE *out_ref = malloc(sizeof(TYPE) * nrows);
-    multi_spmv_ref(vals, cols, rowDelimiters, nrows, vec_ref, out_ref);
-    multi_spmv(vals, cols, rowDelimiters, nrows, vec, out);
+    spmv_ref(vals, cols, rowDelimiters, nrows, vec, out_ref);
+    spmv(vals, cols, rowDelimiters, nrows, vec, out);
     for (uint32_t i = 0; i < nrows; ++i) {
         assert(out_ref[i] == out[i]);
     }

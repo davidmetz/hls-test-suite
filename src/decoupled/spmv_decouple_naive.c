@@ -131,7 +131,7 @@ uint32_t generate_random_square_csr(uint32_t nrows, double density, TYPE **restr
 }
 
 int main() {
-    uint32_t nrows = 32;
+    uint32_t nrows = 128;
     double density = 0.1;//1.0/nrows;
     TYPE *vec = malloc(sizeof(TYPE) * nrows);
     for (uint32_t i = 0; i < nrows; ++i) {

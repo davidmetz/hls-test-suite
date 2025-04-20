@@ -138,45 +138,109 @@ HLS_TEST_BASE_FILES = \
 hls-test-base: $(patsubst %, hls-test/%, $(HLS_TEST_BASE_FILES))
 
 HLS_TEST_DECOUPLED_FILES = \
-	decoupled/test_stream \
+	decoupled/test_decouple_store \
 	decoupled/test_sum \
-	decoupled/test_sum_int \
 	decoupled/test_sum_stream \
 	decoupled/test_sum_decouple \
-	decoupled/test_sum_decouple2 \
 	decoupled/test_indirection \
 	decoupled/test_indirection_stream \
 	decoupled/test_indirection_decouple \
-	decoupled/test_multi_sum_decouple \
 	decoupled/spmv_simple \
-	decoupled/spmv_stream \
 	decoupled/spmv_decouple \
-	decoupled/spmv_decouple_naive \
-	decoupled/multi_spmv_simple \
-	decoupled/multi_spmv_decouple \
+	decoupled/spmv_decouple5 \
+	decoupled/spmv_decouple6 \
+	decoupled/spmv_decouple7 \
+	decoupled/mergesort_simple \
+    decoupled/mergesort_simple2 \
+    decoupled/mergesort_simple3 \
+	decoupled/mergesort_decouple6 \
+	decoupled/mergesort_decouple6 \
+	decoupled/mergesort_decouple7 \
+	decoupled/mergesort_decouple10 \
+	decoupled/mergesort_decouple11 \
+	decoupled/mergesort_decouple12 \
+	decoupled/mergesort_decouple13 \
+	decoupled/hashtable_decouple3 \
 	decoupled/hashtable_simple \
-	decoupled/hashtable_stream \
-	decoupled/hashtable_decouple \
-	decoupled/hashtable_decouple2 \
-	decoupled/binsearch_simple \
-	decoupled/binsearch_simple_for \
-	decoupled/binsearch_simple_early \
-	decoupled/binsearch_simple_early2 \
-	decoupled/binsearch_stream \
-	decoupled/binsearch_stream_rif_while2 \
-	decoupled/binsearch_decouple \
-	decoupled/binsearch_decouple_rif_for \
-	decoupled/binsearch_decouple_rif_while \
-	decoupled/binsearch_decouple_rif_while2 \
-	decoupled/binsearch_decouple_rif_while3 \
+	decoupled/hashtable_simple2 \
+	decoupled/hashtable_simple3 \
+	decoupled/hashtable_decouple4 \
+	decoupled/hashtable_decouple5 \
+	decoupled/binsearch_simple2 \
+	decoupled/binsearch_simple_for4 \
+	decoupled/binsearch_decouple3 \
 	decoupled/binsearch_decouple_rif_while4 \
 	decoupled/binsearch_decouple_rif_while5 \
-    decoupled/mergesort_simple \
-    decoupled/mergesort_simple2 \
-	decoupled/mergesort_decouple \
-	decoupled/mergesort_decouple2 \
-	decoupled/mergesort_decouple3 \
-	decoupled/mergesort_decouple4 \
+	decoupled/binsearch_decouple_rif_while6 \
+	decoupled/binsearch_decouple_rif_while7 \
+	decoupled/multi_spmv_simple \
+	decoupled/multi_spmv_decouple \
+
+
+
+#	decoupled/test_stream \
+#	decoupled/test_sum \
+#	decoupled/test_sum_int \
+#	decoupled/test_sum_stream \
+#	decoupled/test_sum_decouple \
+#	decoupled/test_sum_decouple2 \
+#	decoupled/test_indirection \
+#	decoupled/test_indirection_stream \
+#	decoupled/test_indirection_decouple \
+#	decoupled/test_multi_sum_decouple \
+#	decoupled/test_stream_loop \
+#	decoupled/test_stream_loop2 \
+#	decoupled/spmv_simple \
+#	decoupled/spmv_stream \
+#	decoupled/spmv_decouple \
+#	decoupled/spmv_decouple2 \
+#	decoupled/spmv_decouple3 \
+#	decoupled/spmv_decouple4 \
+#	decoupled/spmv_decouple5 \
+#	decoupled/spmv_decouple_naive \
+#	decoupled/multi_spmv_decouple \
+#	decoupled/hashtable_simple \
+#	decoupled/hashtable_simple2 \
+#	decoupled/hashtable_stream \
+#	decoupled/hashtable_decouple \
+#	decoupled/hashtable_decouple2 \
+#	decoupled/hashtable_decouple3 \
+#	decoupled/hashtable_decouple4 \
+#	decoupled/binsearch_simple \
+#	decoupled/binsearch_simple2 \
+#	decoupled/binsearch_simple_for \
+#	decoupled/binsearch_simple_for2 \
+#	decoupled/binsearch_simple_for3 \
+#	decoupled/binsearch_simple_early \
+#	decoupled/binsearch_simple_early2 \
+#	decoupled/binsearch_stream \
+#	decoupled/binsearch_stream_rif_while2 \
+#	decoupled/binsearch_decouple \
+#	decoupled/binsearch_decouple2 \
+#	decoupled/binsearch_decouple3 \
+#	decoupled/binsearch_decouple_rif_for \
+#	decoupled/binsearch_decouple_rif_for2 \
+#	decoupled/binsearch_decouple_rif_for3 \
+#	decoupled/binsearch_decouple_rif_while \
+#	decoupled/binsearch_decouple_rif_while2 \
+#	decoupled/binsearch_decouple_rif_while3 \
+#	decoupled/binsearch_decouple_rif_while4 \
+#	decoupled/binsearch_decouple_rif_while5 \
+#	decoupled/binsearch_decouple_rif_while6 \
+#	decoupled/mergesort_decouple \
+#	decoupled/mergesort_decouple2 \
+#	decoupled/mergesort_decouple3 \
+#	decoupled/mergesort_decouple4 \
+#	decoupled/mergesort_decouple5 \
+#	decoupled/mergesort_decouple6 \
+#	decoupled/mergesort_decouple7 \
+#	decoupled/mergesort_decouple8 \
+#	decoupled/mergesort_decouple9 \
+#	decoupled/mergesort_decouple10 \
+#    decoupled/mergesort_simple \
+#    decoupled/mergesort_simple2 \
+#    decoupled/mergesort_simple3 \
+#	decoupled/multi_spmv_simple \
 
 
 # directly returning a decouple result is not supported at the moment due to lacking smap support of ReplaceDecouple in mem-conv

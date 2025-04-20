@@ -30,11 +30,10 @@ enum decoupled_channels {
     l_stream2,
     r_sorted_channel,
     l_sorted_channel,
-    index_stream,
+    iteration_stream
 };
 
 #define EXTRA_ITERATIONS 1
-#define RIF (OUTSTANDING_READS-1)
 
 void kernel(
         const TYPE *table,
@@ -43,40 +42,43 @@ void kernel(
         uint32_t table_elements,
         uint32_t sorted_elements
 ) {
-
-    for (uint32_t i = 0; i < table_elements; i++) {
-        hls_decouple_request_32(table_channel, &table[i]);
-    }
     uint32_t rif = 0; // requests in flight
     uint32_t table_i = 0;
     for (uint32_t i = 0; i < table_elements;) {
-        uint32_t l, r, m, index;
+        uint32_t l, r, m;
+        uint32_t iteration;
         TYPE element;
-        if (rif < RIF && table_i < table_elements) {
-            element = hls_decouple_response_32(table_channel, OUTSTANDING_READS);
-            index = table_i++;
+        if (rif < OUTSTANDING_READS && table_i < table_elements) {
+            element = table[table_i];
+            table_i++;
             l = 0;
             r = sorted_elements - 1;
+            iteration = 1;
             rif++;
         } else {
             element = hls_stream_deq_uint32t(element_stream, OUTSTANDING_READS);
             l = hls_stream_deq_uint32t(l_stream, OUTSTANDING_READS);
             r = hls_stream_deq_uint32t(r_stream, OUTSTANDING_READS);
-            index = hls_stream_deq_uint32t(index_stream, OUTSTANDING_READS);
+            iteration = hls_stream_deq_uint32t(iteration_stream, OUTSTANDING_READS);
             TYPE tmp = hls_decouple_response_32(sorted_channel, OUTSTANDING_READS);
             m = (r + l) >> 1;
-            if (tmp > element) {
-                r = m-1;
-            } else {
-                l = m+1;
-            }
             bool equal = tmp == element;
             uint32_t res = -1;
             if(equal){
                 res = m;
+            } else {
+                // keep values if we hit
+                if (tmp > element) {
+                    r = m-1;
+                } else {
+                    l = m+1;
+                }
             }
-            if(equal || !(l<=r)){
-                result[index] = res;
+            // increase after we actually performed iteration
+            iteration = iteration << 1;
+            // !(r - l > 1) leads to out of order results, since this can happen earlier, so we need iteration
+            if (iteration>sorted_elements) {
+                result[i] = res;
                 i++;
                 rif--;
                 continue;
@@ -86,7 +88,7 @@ void kernel(
         hls_stream_enq_uint32t(element_stream, element);
         hls_stream_enq_uint32t(l_stream, l);
         hls_stream_enq_uint32t(r_stream, r);
-        hls_stream_enq_uint32t(index_stream, index);
+        hls_stream_enq_uint32t(iteration_stream, iteration);
         hls_decouple_request_32(sorted_channel, &sorted[m]);
     }
 }

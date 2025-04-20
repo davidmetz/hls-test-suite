@@ -8,7 +8,7 @@
 //#define TYPE int
 #define LATENCY 100
 #define ITERATIONS 10
-#define FACTOR 1
+#define FACTOR 0.0001f
 
 extern void hls_decouple_request_32(uint32_t channel, const uint32_t * addr);
 extern uint32_t hls_decouple_response_32(uint32_t channel, uint32_t buffer_slots);
@@ -30,12 +30,14 @@ void kernel(
         const uint32_t *restrict rowDelimiters,
         uint32_t startElement,
         uint32_t endElement,
-        uint32_t nextDelim,
+        uint32_t firstDelim,
         TYPE *restrict vec,
         TYPE *restrict out,
-        uint32_t nrows
+        uint32_t nrows,
+        TYPE factor,
+        uint32_t iterations
 ){
-    for (uint32_t k = 0; k < ITERATIONS; ++k) {
+    for (uint32_t k = 0; k < iterations; ++k) {
         for (uint32_t j = startElement; j < endElement; j++) {
             hls_decouple_request_32(cols_dec_channel, &cols[j]);
         }
@@ -46,31 +48,33 @@ void kernel(
         for (uint32_t j = startElement; j < endElement; j++) {
             hls_decouple_request_TYPE(vals_dec_channel, &vals[j]);
         }
-        for (uint32_t j = 2; j <= nrows+1; j++) {
-            hls_decouple_request_32(rows_dec_channel, &rowDelimiters[j]);
+        for (uint32_t j = 0; j < nrows; j++) {
+            hls_decouple_request_32(rows_dec_channel, &rowDelimiters[j+2]);
         }
         TYPE sum = 0;
         uint32_t r = 0;
-        for (uint32_t j = startElement; j <= endElement; j++) {
-            while (j==nextDelim){
-                out[r] = sum;
-                sum = 0;
-                r++;
-                nextDelim = hls_decouple_response_32(rows_dec_channel, LATENCY);
-            }
-            if(j < endElement){
+        uint32_t nextDelim = firstDelim;
+        uint32_t rowStart = startElement;
+        for(uint32_t i = 0; i < nrows; i++){
+            TYPE sum = 0;
+            for (uint32_t j = rowStart; j < nextDelim; j++){
                 TYPE cval = hls_decouple_response_TYPE(vals_dec_channel, LATENCY);
                 TYPE vval = hls_decouple_response_TYPE(vec_dec_channel, LATENCY);
                 TYPE Si = cval * vval;
                 sum += Si;
             }
+            out[i] = sum;
+            rowStart = nextDelim;
+            nextDelim = hls_decouple_response_32(rows_dec_channel, LATENCY);
         }
-        for (uint32_t l = 0; l < nrows; ++l) {
-            hls_decouple_request_TYPE(out_dec_channel, &out[l]);
+        // the loop bounds of these two loops are different to get correct decoupling - otherwise
+        // they are in the same gamma as the spmv loop after tgi and decouple-mem-state fails
+        for (uint32_t l = 1; l <= nrows; ++l) {
+            hls_decouple_request_TYPE(out_dec_channel, &out[l-1]);
         }
-        for (uint32_t l = 0; l < nrows; ++l) {
+        for (uint32_t l = 1; l <= nrows; ++l) {
             TYPE oval = hls_decouple_response_TYPE(out_dec_channel, LATENCY);
-            vec[l] = oval*FACTOR;
+            vec[l-1] = oval*factor;
         }
     }
 }
@@ -83,7 +87,7 @@ void multi_spmv(
         TYPE *restrict vec,
         TYPE *restrict out
 ) {
-    kernel(vals, cols, rowDelimiters, rowDelimiters[0], rowDelimiters[nrows], rowDelimiters[1], vec, out, nrows);
+    kernel(vals, cols, rowDelimiters, rowDelimiters[0], rowDelimiters[nrows], rowDelimiters[1], vec, out, nrows, FACTOR, ITERATIONS);
 }
 
 void multi_spmv_ref(
@@ -139,7 +143,7 @@ uint32_t generate_random_square_csr(uint32_t nrows, double density, TYPE **restr
 }
 
 int main() {
-    uint32_t nrows = 32;
+    uint32_t nrows = 128;
     double density = 0.1;//1.0/nrows;
     TYPE *vec = malloc(sizeof(TYPE) * nrows);
     TYPE *vec_ref = malloc(sizeof(TYPE) * nrows);
