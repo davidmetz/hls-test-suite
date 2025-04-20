@@ -308,8 +308,11 @@ build_folder = pathlib.Path("../build")
 
 
 def resize(verilog: pathlib.Path):
-    print("starting", verilog)
     acc = RhlsAccelerator(verilog)
+    if acc.get_suffix_variant(".resize").verilog_path.exists():
+        print(f"skipping {acc.sim_path}")
+        return
+    print("starting", verilog)
     up_acc = acc.upsize_buffers(128)
     up_acc.build_sim()
     up_cycles = up_acc.run_sim()
@@ -320,8 +323,11 @@ def resize(verilog: pathlib.Path):
 
 
 def downsize(verilog: pathlib.Path):
-    print("starting", verilog)
     acc = RhlsAccelerator(verilog)
+    if acc.get_suffix_variant(".downsize").verilog_path.exists():
+        print(f"skipping {acc.sim_path}")
+        return
+    print("starting", verilog)
     acc.build_sim()
     cycles = acc.run_sim()
     print(verilog, cycles, "cycles")
@@ -338,14 +344,15 @@ def main():
     for verilog in verilogs:
         if verilog.suffixes[0] != ".hls":
             continue
-        acc = RhlsAccelerator(verilog)
-        if acc.get_suffix_variant(".downsize").verilog_path.exists():
-            print(f"skipping {acc.sim_path}")
-            continue
+        # acc = RhlsAccelerator(verilog)
+        # if acc.get_suffix_variant(".downsize").verilog_path.exists():
+        #     print(f"skipping {acc.sim_path}")
+        #     continue
         targets.append(verilog)
 
     pool = multiprocessing.Pool(8)
     pool.map(downsize, targets, chunksize=1)
+    # pool.map(resize, targets, chunksize=1)
     pool.close()
 
 
